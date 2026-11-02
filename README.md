@@ -18,26 +18,82 @@ Every question is judged against a **context** (the "state"): plain text or JSON
 
 ## Setup (Windows)
 
-Needs [uv](https://docs.astral.sh/uv/) and about 6 GB of disk. This creates `.venv`, downloads the llama.cpp CPU
-build and the model, and checks the model's SHA-256:
+The model is not in this repo; it comes straight from Hugging Face. You need about 6 GB of disk.
+
+### Option A: setup script
+
+Needs [uv](https://docs.astral.sh/uv/). Creates `.venv`, downloads the llama.cpp CPU build and the model, and checks
+the model's SHA-256:
 
 ```powershell
 .\setup.ps1
 ```
 
-## Run
+### Option B: manual
 
-Two terminals:
+1. **Python environment** (Python 3.10+):
 
-```powershell
-.\start-server.ps1                    # llama-server on 127.0.0.1:8080
-.venv\Scripts\python.exe app.py       # UI on http://127.0.0.1:5050
+   ```powershell
+   python -m venv .venv
+   .venv\Scripts\pip install -r requirements.txt
+   ```
+
+2. **llama.cpp:** download `llama-b12032-bin-win-cpu-x64.zip` from the
+   [llama.cpp b12032 release](https://github.com/ggml-org/llama.cpp/releases/tag/b12032) and unzip it into
+   `tools\llama.cpp\` so that `tools\llama.cpp\llama-server.exe` exists. Use the CUDA or Vulkan build instead if you
+   have a GPU.
+
+3. **Model:** from [frontier-infra/jebadiah-9b-v2-1-GGUF](https://huggingface.co/frontier-infra/jebadiah-9b-v2-1-GGUF)
+   download into `models\jeb-9b-v2.1\`:
+   - `jebadiah-9b-v2-1-Q4_K_M.gguf` (5.78 GB)
+   - the `scripts\` folder
+   - `tokenizer.json`, `tokenizer_config.json`, `chat_template.jinja`, `temperatures.json`
+
+   Or with the Hugging Face CLI:
+
+   ```powershell
+   .venv\Scripts\hf download frontier-infra/jebadiah-9b-v2-1-GGUF `
+       --include "jebadiah-9b-v2-1-Q4_K_M.gguf" --include "scripts/*" --include "*.json" `
+       --include "*.jinja" --include "*.txt" --local-dir models\jeb-9b-v2.1
+   ```
+
+   Expected SHA-256 of the GGUF: `cb29828caeba5d379e61e7606a988fcc13c4b6f6c77610155dcea1ed7a968e2b`
+   (check with `Get-FileHash models\jeb-9b-v2.1\jebadiah-9b-v2-1-Q4_K_M.gguf`).
+
+The resulting layout:
+
+```
+models\jeb-9b-v2.1\jebadiah-9b-v2-1-Q4_K_M.gguf
+models\jeb-9b-v2.1\scripts\decide_gguf.py, jebadiah_prompt.py, ...
+models\jeb-9b-v2.1\tokenizer.json, temperatures.json, ...
+tools\llama.cpp\llama-server.exe
 ```
 
-Or from Python:
+## Run
+
+1. **Start the engine** (terminal 1). Runs `llama-server` on `127.0.0.1:8080`, CPU only, 4096 context, 4 threads
+   (`-Threads 8` to change). Wait for `listening on http://127.0.0.1:8080`:
+
+   ```powershell
+   .\start-server.ps1
+   ```
+
+2. **Start the UI** (terminal 2), then open http://127.0.0.1:5050:
+
+   ```powershell
+   .venv\Scripts\python.exe app.py
+   ```
+
+3. **Quick test** without the UI (engine must be running):
+
+   ```powershell
+   .venv\Scripts\python.exe quick_test.py
+   ```
+
+Or from your own Python script (run from the repo folder):
 
 ```python
-from decide import decide
+from app import decide
 
 decide("It is raining heavily and I need to walk to the shop.", {
     "bring": {"type": "choice", "instructions": "What should I bring?",
@@ -45,11 +101,9 @@ decide("It is raining heavily and I need to walk to the shop.", {
 })
 ```
 
-`quick_test.py` runs one example of each question type.
-
 ## How it works
 
-`llama-server` knows nothing about decisions. For each question, `decide.py` uses the model repo's own renderer to
+`llama-server` knows nothing about decisions. For each question, `decide()` in `app.py` uses the model repo's own renderer to
 build the exact training prompt, asks `/completion` for the probabilities of the next token, keeps only the option
 labels (`A`, `B`, …), renormalises them and applies the model's calibration temperatures.
 

@@ -1,8 +1,8 @@
-"""Three everyday sanity checks, one per question type."""
+"""Three everyday sanity checks, one per question type. Needs llama-server running (.\\start-server.ps1)."""
 import json
 import time
 
-from decide import decide
+from app import decide
 
 tests = [
     ("noul", "The sky on a clear afternoon.", {
