@@ -1,0 +1,8 @@
+# Recreated by setup.ps1
+.venv/
+tools/
+models/
+
+# Python
+__pycache__/
+*.pyc

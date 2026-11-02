@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Decision Engine</title>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f5f2; --card: #ffffff; --text: #1f1e1c; --muted: #6b6a66; --faint: #a3a29d;
+    --line: #dddbd4; --line-strong: #bdbbb3; --accent: #2f6fd0; --accent-bg: #e6effb;
+    --bar: #2f6fd0; --bar-dim: #c9c7bf; --warn: #9a5b00; --warn-bg: #fbf0dc; --danger: #b42318; --danger-bg: #fdecea;
+    --ok: #2d7a3a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1b1b1a; --card: #252524; --text: #ecebe7; --muted: #a3a29d; --faint: #75746f;
+      --line: #3a3a38; --line-strong: #52524f; --accent: #7aa8ec; --accent-bg: #22324a;
+      --bar: #7aa8ec; --bar-dim: #4a4a47; --warn: #e8b05c; --warn-bg: #3a2e1a; --danger: #f08b80; --danger-bg: #3d2220;
+      --ok: #7cc68a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 16px 16px 340px; }
+  header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  h1 { font-size: 18px; font-weight: 600; margin: 0; }
+  .status { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+  .dot.ok { background: var(--ok); } .dot.down { background: var(--danger); }
+  .panel, .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .panel { margin-bottom: 16px; }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .spread { justify-content: space-between; }
+  .label { font-weight: 600; font-size: 13px; }
+  .hint { font-size: 12px; color: var(--muted); }
+  textarea, input[type=text] { width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  textarea { font-family: ui-monospace, Consolas, monospace; font-size: 13px; resize: vertical; min-height: 64px; }
+  textarea:focus, input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button { font: inherit; color: var(--text); background: transparent; border: 1px solid var(--line-strong); border-radius: 8px; padding: 4px 10px; cursor: pointer; }
+  button:hover { background: var(--bg); }
+  button.on { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; padding: 6px 16px; }
+  button.icon { border: none; padding: 2px 6px; color: var(--muted); }
+  .feed { display: flex; flex-direction: column; gap: 10px; }
+  .card .head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+  .tag { font-size: 11px; border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 6px; color: var(--muted); margin-right: 6px; white-space: nowrap; }
+  .q { font-weight: 500; }
+  .meta { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .bars { margin-top: 10px; display: grid; grid-template-columns: minmax(70px, max-content) 1fr 56px; gap: 6px 10px; align-items: center; }
+  .bar { height: 12px; border-radius: 3px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; }
+  .bar > div { height: 100%; background: var(--bar-dim); }
+  .bar.top > div { background: var(--bar); }
+  .pct { text-align: right; font-variant-numeric: tabular-nums; font-size: 13px; }
+  .name.top { font-weight: 600; }
+  .big { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .flag { display: inline-block; margin-top: 8px; font-size: 12px; color: var(--warn); background: var(--warn-bg); border-radius: 4px; padding: 1px 8px; }
+  .err { color: var(--danger); background: var(--danger-bg); border-radius: 6px; padding: 6px 10px; font-size: 13px; margin-top: 8px; }
+  .scale { position: relative; height: 2px; background: var(--line-strong); margin: 22px 6px 6px; }
+  .scale .tick { position: absolute; top: -4px; width: 1px; height: 10px; background: var(--line-strong); }
+  .scale .marker { position: absolute; top: -9px; width: 3px; height: 20px; background: var(--bar); border-radius: 2px; transform: translateX(-1px); }
+  .scale-labels { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); gap: 6px; }
+  .scale-labels span.top { color: var(--text); font-weight: 600; }
+  .empty { text-align: center; color: var(--muted); padding: 32px 0; }
+  .composer { position: fixed; left: 0; right: 0; bottom: 0; padding: 0 16px 16px; pointer-events: none; }
+  .composer .box { pointer-events: auto; max-width: 760px; margin: 0 auto; background: var(--card); border: 1px solid var(--line-strong); border-radius: 14px; padding: 12px; box-shadow: 0 8px 28px rgba(0,0,0,.12); }
+  .opts { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; max-height: 180px; overflow-y: auto; }
+  .opt { display: grid; grid-template-columns: 22px 150px 1fr 28px; gap: 6px; align-items: center; }
+  .opt .idx { font-size: 12px; color: var(--faint); text-align: right; }
+  .opt input { padding: 5px 8px; }
+  .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--line-strong); border-top-color: var(--accent); border-radius: 50%; animation: s 0.8s linear infinite; vertical-align: -2px; }
+  @keyframes s { to { transform: rotate(360deg); } }
+  [x-cloak] { display: none !important; }
+  @media (max-width: 560px) { .opt { grid-template-columns: 18px 1fr 28px; } .opt .desc { grid-column: 2 / 3; } }
+</style>
+</head>
+<body x-data="engine()" x-init="init()">
+<div class="wrap">
+  <header>
+    <h1>Decision engine</h1>
+    <div class="status"><span class="dot" :class="engine"></span><span x-text="engine === 'ok' ? 'llama-server ready' : engine === 'down' ? 'llama-server unreachable' : 'checking…'"></span></div>
+  </header>
+
+  <section class="panel">
+    <div class="row spread">
+      <span class="label">Context</span>
+      <div class="row">
+        <button :class="{on: !stateIsJson}" @click="stateIsJson = false">Text</button>
+        <button :class="{on: stateIsJson}" @click="stateIsJson = true">JSON</button>
+        <button class="icon" @click="showState = !showState" x-text="showState ? 'Hide' : 'Show'"></button>
+      </div>
+    </div>
+    <div x-show="showState" style="margin-top: 8px;">
+      <textarea x-model="state" rows="3" placeholder="Customer says the invoice total does not match the quote."></textarea>
+      <div class="hint">Every question below is judged against this context. Roughly <span x-text="Math.ceil(state.length / 4)"></span> tokens; the model keeps up to 2,048.</div>
+    </div>
+  </section>
+
+  <div class="feed">
+    <template x-if="!feed.length">
+      <div class="empty">Ask a yes/no, choice or score question below.</div>
+    </template>
+    <template x-for="item in feed" :key="item.id">
+      <article class="card">
+        <div class="head">
+          <div><span class="tag" x-text="typeName[item.type]"></span><span class="q" x-text="item.question"></span></div>
+          <span class="meta" x-show="item.status === 'pending'"><span class="spin"></span> <span x-text="item.elapsed.toFixed(1) + 's'"></span></span>
+          <span class="meta" x-show="item.status === 'done'" x-text="metaLine(item)"></span>
+        </div>
+
+        <template x-if="item.status === 'error'"><div class="err" x-text="item.error"></div></template>
+
+        <template x-if="item.status === 'done' && item.type === 'noul'">
+          <div>
+            <div class="row" style="margin-top: 8px; gap: 12px;">
+              <span class="big" x-text="item.answer.noul >= 0.5 ? 'Yes' : 'No'"></span>
+              <span class="hint" x-text="'P(yes) = ' + pct(item.answer.noul)"></span>
+            </div>
+            <div class="bars">
+              <span class="name" :class="{top: item.answer.noul >= 0.5}">yes</span>
+              <div class="bar" :class="{top: item.answer.noul >= 0.5}"><div :style="`width:${item.answer.noul * 100}%`"></div></div>
+              <span class="pct" x-text="pct(item.answer.noul)"></span>
+              <span class="name" :class="{top: item.answer.noul < 0.5}">no</span>
+              <div class="bar" :class="{top: item.answer.noul < 0.5}"><div :style="`width:${(1 - item.answer.noul) * 100}%`"></div></div>
+              <span class="pct" x-text="pct(1 - item.answer.noul)"></span>
+            </div>
+            <template x-if="Math.abs(item.answer.noul - 0.5) < 0.15"><span class="flag">Uncertain: close to 50/50</span></template>
+          </div>
+        </template>
+
+        <template x-if="item.status === 'done' && item.type === 'choice'">
+          <div>
+            <div class="bars">
+              <template x-for="(o, i) in ranked(item.answer.probabilities)" :key="o.name">
+                <div style="display: contents;">
+                  <span class="name" :class="{top: i === 0}" x-text="o.name"></span>
+                  <div class="bar" :class="{top: i === 0}"><div :style="`width:${o.p * 100}%`"></div></div>
+                  <span class="pct" x-text="pct(o.p)"></span>
+                </div>
+              </template>
+            </div>
+            <template x-if="margin(item.answer.probabilities) < 0.2"><span class="flag">Uncertain: top two are close</span></template>
+          </div>
+        </template>
+
+        <template x-if="item.status === 'done' && item.type === 'score'">
+          <div>
+            <div class="row" style="margin-top: 8px; gap: 12px;">
+              <span class="big" x-text="item.answer.score.toFixed(2)"></span>
+              <span class="hint" x-text="'≈ ' + item.answer.legend[Math.round(item.answer.score)] + ' (0 to ' + (item.levels - 1) + ')'"></span>
+            </div>
+            <div class="scale">
+              <template x-for="i in item.levels"><div class="tick" :style="`left:${(i - 1) / (item.levels - 1) * 100}%`"></div></template>
+              <div class="marker" :style="`left:${item.answer.score / (item.levels - 1) * 100}%`"></div>
+            </div>
+            <div class="scale-labels">
+              <template x-for="(name, k) in Object.values(item.answer.legend)">
+                <span :class="{top: k === Math.round(item.answer.score)}" x-text="name + ' ' + pct(item.answer.probabilities[k])"></span>
+              </template>
+            </div>
+          </div>
+        </template>
+      </article>
+    </template>
+  </div>
+</div>
+
+<div class="composer">
+  <form class="box" @submit.prevent="submit()">
+    <div class="row spread">
+      <div class="row">
+        <button type="button" :class="{on: type === 'noul'}" @click="type = 'noul'">Yes / no</button>
+        <button type="button" :class="{on: type === 'choice'}" @click="type = 'choice'">Choice</button>
+        <button type="button" :class="{on: type === 'score'}" @click="type = 'score'">Score</button>
+      </div>
+      <button type="button" class="icon" x-show="feed.length" @click="feed = []">Clear feed</button>
+    </div>
+
+    <div class="row" style="margin-top: 10px;">
+      <input type="text" x-model="question" x-ref="q" @input="error = ''"
+             :placeholder="placeholders[type]">
+      <button type="submit" class="primary" :disabled="busy" x-text="busy ? 'Deciding…' : 'Decide'"></button>
+    </div>
+
+    <div class="opts">
+      <template x-if="type === 'noul'">
+        <div style="display: contents;">
+          <div class="hint">Optional: describe what yes and no mean.</div>
+          <div class="opt"><span class="idx"></span><input type="text" value="yes (true)" disabled><input class="desc" type="text" x-model="noulTrue" placeholder="the sky is blue"><span></span></div>
+          <div class="opt"><span class="idx"></span><input type="text" value="no (false)" disabled><input class="desc" type="text" x-model="noulFalse" placeholder="the sky is another color"><span></span></div>
+        </div>
+      </template>
+      <template x-if="type !== 'noul'">
+        <div style="display: contents;">
+          <div class="hint" x-text="type === 'choice' ? 'Options (2–20). Name is what comes back; description is optional.' : 'Levels from lowest to highest (2–10). Description is optional.'"></div>
+          <template x-for="(o, i) in opts[type]" :key="o.id">
+            <div class="opt">
+              <span class="idx" x-text="type === 'score' ? i : '•'"></span>
+              <input type="text" x-model="o.name" @input="error = ''" :placeholder="type === 'choice' ? 'umbrella' : 'level name'">
+              <input class="desc" type="text" x-model="o.desc" placeholder="description (optional)">
+              <button type="button" class="icon" @click="removeOpt(i)" aria-label="Remove">✕</button>
+            </div>
+          </template>
+          <div><button type="button" class="icon" @click="addOpt()">+ Add</button></div>
+        </div>
+      </template>
+    </div>
+    <div class="err" x-show="error" x-cloak x-text="error"></div>
+  </form>
+</div>
+
+<script>
+let nextId = 1;
+const blank = () => ({ id: nextId++, name: '', desc: '' });
+
+function engine() {
+  return {
+    engine: 'checking', state: '', stateIsJson: false, showState: true,
+    type: 'noul', question: '', noulTrue: '', noulFalse: '',
+    opts: { choice: [blank(), blank()], score: [blank(), blank(), blank()] },
+    feed: [], busy: false, error: '',
+    typeName: { noul: 'yes/no', choice: 'choice', score: 'score' },
+    placeholders: { noul: 'Is the sky color blue?', choice: 'What should I bring?', score: 'How hungry am I likely to be?' },
+
+    init() { this.checkHealth(); setInterval(() => this.checkHealth(), 10000); },
+    async checkHealth() {
+      try { this.engine = (await (await fetch('/api/health')).json()).engine === 'ok' ? 'ok' : 'down'; }
+      catch { this.engine = 'down'; }
+    },
+    addOpt() { const max = this.type === 'choice' ? 20 : 10; if (this.opts[this.type].length < max) this.opts[this.type].push(blank()); },
+    removeOpt(i) { this.opts[this.type].splice(i, 1); },
+
+    buildQuestion() {
+      const q = { type: this.type, instructions: this.question.trim() };
+      if (!q.instructions) return 'Enter a question first.';
+      if (this.type === 'noul') {
+        const c = {};
+        if (this.noulTrue.trim()) c.true = this.noulTrue.trim();
+        if (this.noulFalse.trim()) c.false = this.noulFalse.trim();
+        if (Object.keys(c).length) q.criteria = c;
+        return q;
+      }
+      const rows = this.opts[this.type].filter(o => o.name.trim());
+      const [min, max] = this.type === 'choice' ? [2, 20] : [2, 10];
+      if (rows.length < min || rows.length > max) return `Add ${min} to ${max} named ${this.type === 'choice' ? 'options' : 'levels'}.`;
+      const names = rows.map(o => o.name.trim());
+      if (new Set(names).size !== names.length) return 'Each name must be different.';
+      q.criteria = Object.fromEntries(rows.map(o => [o.name.trim(), o.desc.trim() || null]));
+      return q;
+    },
+
+    async submit() {
+      if (this.busy) return;
+      const q = this.buildQuestion();
+      if (typeof q === 'string') { this.error = q; return; }
+      this.error = '';
+      const item = { id: nextId++, type: q.type, question: q.instructions, levels: Object.keys(q.criteria || {}).length,
+                     status: 'pending', elapsed: 0, answer: null, error: '', seconds: 0 };
+      this.feed.push(item);
+      const live = this.feed[this.feed.length - 1];
+      this.question = '';
+      this.busy = true;
+      this.$nextTick(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }));
+      const t0 = performance.now();
+      const timer = setInterval(() => { live.elapsed = (performance.now() - t0) / 1000; }, 100);
+      try {
+        const r = await fetch('/api/decide', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ state: this.state, state_is_json: this.stateIsJson, question: q }) });
+        const data = await r.json();
+        if (!r.ok) { live.status = 'error'; live.error = data.error || `Request failed (${r.status}).`; }
+        else { live.answer = data.answer; live.seconds = data.seconds; live.status = 'done'; }
+      } catch (e) {
+        live.status = 'error'; live.error = "Can't reach the app server.";
+      } finally {
+        clearInterval(timer); this.busy = false;
+        this.$nextTick(() => { window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); this.$refs.q.focus(); });
+      }
+    },
+
+    pct(p) { return (p * 100).toFixed(1) + '%'; },
+    ranked(probs) { return Object.entries(probs).map(([name, p]) => ({ name, p })).sort((a, b) => b.p - a.p); },
+    margin(probs) { const r = this.ranked(probs); return r.length < 2 ? 1 : r[0].p - r[1].p; },
+    metaLine(item) {
+      const c = item.answer && item.answer.confidence !== undefined ? `conf ${item.answer.confidence.toFixed(2)} · ` : '';
+      return c + item.seconds.toFixed(1) + 's';
+    },
+  };
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+transformers==5.17.0   # tokenizer + chat template only; PyTorch is not needed
+jinja2                 # required by apply_chat_template, not pulled in by transformers
+huggingface_hub
+flask
